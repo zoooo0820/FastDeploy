@@ -20,7 +20,7 @@ import paddle
 
 paddle.compat.enable_torch_proxy(scope={"deep_gemm"})
 import deep_gemm
-
+import fastdeploy
 from fastdeploy import envs
 from fastdeploy.model_executor.layers.linear import (
     MergedColumnParallelLinear,
@@ -245,25 +245,19 @@ class BlockWiseFP8LinearMethod(QuantMethodBase):
 
     def apply(self, layer, x):
 
-        x, x_scale_tensor = deep_gemm.utils.math.per_token_cast_to_fp8(x, use_ue8m0=True)
-        x_scale_tensor = transform_scale_ue8m0(x_scale_tensor, mn=x.shape[-2])
-
         linear_out: paddle.Tensor = paddle.empty((x.shape[0], layer.output_size), dtype=paddle.bfloat16)
-        # print(f"[FP8Linear] x_quantized: {x}", x.stride())
-        # print(f"[FP8Linear] x_scale_tensor: {x_scale_tensor}", x_scale_tensor.stride())
-        # print(f"[FP8Linear] layer.weight: {layer.weight}", layer.weight.stride())
-        # print(f"[FP8Linear] layer.weight_scale_inv: {layer.weight_scale_inv}", layer.weight_scale_inv.stride())
 
-        deep_gemm.fp8_gemm_nt(
-            (x, x_scale_tensor),
-            (layer.weight, layer.weight_scale_inv),
-            linear_out,
-            # disable_ue8m0_cast=True,
-        )
-        # print(f"[FP8Linear] block_tables 3: {block_tables}")
-        # print(f"[FP8Linear] linear_out: {linear_out}")
-        if layer.with_bias:
-            linear_out = paddle.add(linear_out, layer.bias)
-        # print(f"[FP8Linear] linear_out after bias: {linear_out}")
-        # raise ValueError('xxxxxx')
-        return linear_out
+        if x.shape[0] == 0:
+            return linear_out
+        else:
+            x, x_scale_tensor = deep_gemm.utils.math.per_token_cast_to_fp8(x, use_ue8m0=True)
+            x_scale_tensor = transform_scale_ue8m0(x_scale_tensor, mn=x.shape[-2])
+            deep_gemm.fp8_gemm_nt(
+                (x, x_scale_tensor),
+                (layer.weight, layer.weight_scale_inv),
+                linear_out,
+            )
+
+            if layer.with_bias:
+                linear_out = paddle.add(linear_out, layer.bias)
+            return linear_out
