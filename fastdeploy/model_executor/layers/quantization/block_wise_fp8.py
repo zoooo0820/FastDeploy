@@ -245,9 +245,15 @@ class BlockWiseFP8LinearMethod(QuantMethodBase):
 
     def apply(self, layer, x):
 
-        x, x_scale_tensor = deep_gemm.utils.math.per_token_cast_to_fp8(x, use_ue8m0=True)
-        x_scale_tensor = transform_scale_ue8m0(x_scale_tensor, mn=x.shape[-2])
-
+        # x, x_scale_tensor = deep_gemm.utils.math.per_token_cast_to_fp8(x, use_ue8m0=True)
+        # x_scale_tensor = transform_scale_ue8m0(x_scale_tensor, mn=x.shape[-2])
+        import fastdeploy
+        origin_token = x[0]
+        x, x_scale_tensor = fastdeploy.model_executor.ops.gpu.per_token_quant_padding(
+            x, 128, True
+        )
+        x=x[:origin_token,...]
+        
         linear_out: paddle.Tensor = paddle.empty((x.shape[0], layer.output_size), dtype=paddle.bfloat16)
         # print(f"[FP8Linear] x_quantized: {x}", x.stride())
         # print(f"[FP8Linear] x_scale_tensor: {x_scale_tensor}", x_scale_tensor.stride())
